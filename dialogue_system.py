@@ -25,7 +25,7 @@ class DialogueSystem:
         # =======================================================
         # 📌 最新版 Gemini API 初始化 (使用 google.genai)
         # =======================================================
-        api_key = os.environ.get("GEMINI_API_KEY") or AIzaSyA8GbZQ_mXsI3zgqgDEsI4PIgTIGZZ2_TY
+        api_key = os.environ.get("GEMINI_API_KEY") or "AIzaSyA8GbZQ_mXsI3zgqgDEsI4PIgTIGZZ2_TY"
         self.client = genai.Client(api_key=api_key)
         
         self.safety_settings = [
