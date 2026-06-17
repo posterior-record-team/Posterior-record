@@ -7,7 +7,7 @@ class BackpackSystem:
         # 將原本在 main.py 的背包變數搬過來
         self.is_open = False
         self.current_tab = 0
-        self.tabs = ["狀態", "術法", "成就", "設定", "離開"]
+        self.tabs = ["狀態", "術法",  "離開"]
 
     def toggle(self):
         """切換背包開關"""
@@ -57,27 +57,25 @@ class BackpackSystem:
         
 
         if self.current_tab == 0:
-            # ... 這裡是你原本繪製道具圖示與數量的迴圈或程式碼 ...
             
             # 📌 善惡值單獨繪製在物品欄的下方
-            karma_surf = font.render(f"善惡值: {game_state.karma}", True, (255, 255, 255))
-            
-            # 坐標 (80, 210) 可以讓它乖乖待在物品欄下方，既不會擋到道具，也不會超出邊框
+            karma_text = f"善惡值: {game_state.karma}"
+            karma_surf = font.render(karma_text, True, (255, 255, 255))
             screen.blit(karma_surf, (100, 80))
 
              # 2.. 好感度 (favorability) - 稍微偏橘紅色的字體，代表警戒
-            suspicion_text = f"好感度: {game_state.suspicion}%"
-            suspicion_surf = font.render(suspicion_text, True, (231, 136, 221)) # 暗橘色
-            screen.blit(suspicion_surf, (280, 80))
+            favorability_text = f"好感度: {game_state.favorability}"
+            favorability_surf = font.render(favorability_text, True, (231, 136, 221))
+            screen.blit(favorability_surf, (280, 80))
 
             # 3. 精神污染度 (Corruption) - 稍微偏紫紅色的字體，增加氛圍感
-            corruption_text = f"精神污染度: {game_state.corruption}%"
-            corruption_surf = font.render(corruption_text, True, (240, 128, 128)) # 淺赤色
+            corruption_text = f"精神污染度: {game_state.corruption}"
+            corruption_surf = font.render(corruption_text, True, (240, 128, 128))
             screen.blit(corruption_surf, (100, 120))
             
             # 4. 警戒值 (Suspicion) - 稍微偏橘紅色的字體，代表警戒
-            suspicion_text = f"警戒值: {game_state.suspicion}%"
-            suspicion_surf = font.render(suspicion_text, True, (255, 140, 0)) # 暗橘色
+            suspicion_text = f"警戒值: {game_state.suspicion}"
+            suspicion_surf = font.render(suspicion_text, True, (255, 140, 0))
             screen.blit(suspicion_surf, (280, 120))
 
             
@@ -85,19 +83,20 @@ class BackpackSystem:
 
         # 1 代表「術法」分頁  
         if self.current_tab == 1:
+            heal_level = game_state.get_magic_level("heal")
+            attack_level = game_state.get_magic_level("attack")
+            thief_level = game_state.get_magic_level("thief")
 
-            # 繪製魔法經驗值
-            heal_surf = font.render(f"治療魔法 經驗值: {game_state.magic_exp_heal}", True, (255, 255, 255))
-            attack_surf = font.render(f"攻擊魔法 經驗值: {game_state.magic_exp_attack}", True, (255, 255, 255))
-            thief_surf = font.render(f"盜賊魔法 經驗值: {game_state.magic_exp_thief}", True, (255, 255, 255))
+            heal_surf = font.render(f"治療魔法 等級: {heal_level}", True, (255, 255, 255))
+            attack_surf = font.render(f"攻擊魔法 等級: {attack_level}", True, (255, 255, 255))
+            thief_surf = font.render(f"盜賊魔法 等級: {thief_level}", True, (255, 255, 255))
 
-            #  UI 座標調整 
             screen.blit(heal_surf, (80, 80))
             screen.blit(attack_surf, (240, 80))
             screen.blit(thief_surf, (80, 100))
 
         # 4 代表「離開」分頁   
-        if self.current_tab == 4:  # 4 代表「離開」分頁
+        if self.current_tab == 2:  # 4 代表「離開」分頁
             confirm_surface = font.render("👉 按下 [ Enter ] 鍵確定離開遊戲", False, (255, 255, 255))
 
             screen.blit(confirm_surface, (menu_x + 15, menu_y + 110))
