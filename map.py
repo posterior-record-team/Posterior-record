@@ -33,22 +33,21 @@ class RoomMap:
                 y = row_idx * self.tile_size + self.offset_y
                 if tile == 1:
                     pygame.draw.rect(screen, (70, 60, 50), (x, y, self.tile_size, self.tile_size))
-                    pygame.draw.rect(screen, (40, 30, 20), (x, y, self.tile_size, self.tile_size), 1)
+
                 elif tile == 2:
                     pygame.draw.rect(screen, (160, 80, 40), (x, y, self.tile_size, self.tile_size))
-                    pygame.draw.rect(screen, (255, 200, 150), (x, y, self.tile_size, self.tile_size), 1)
+
                 elif tile == 0:
                     pygame.draw.rect(screen, (130, 100, 70), (x, y, self.tile_size, self.tile_size))
                     pygame.draw.rect(screen, (110, 85, 60), (x, y, self.tile_size, self.tile_size), 1)
+
 
 """ 走廊地圖 (30x12 格) """
 class CorridorMap:
 
     def __init__(self):
         self.tile_size = 16
-        # 全螢幕不需偏移量
-        self.offset_x = 0
-        self.offset_y = 0
+
         
         # 1=外牆空氣牆, 0=走廊地板
         # 3=皮歐里辦公室(右上), 4=醫療室回頭門(右下)
@@ -81,10 +80,9 @@ class CorridorMap:
         self.office_door_rect = pygame.Rect(25 * self.tile_size + self.offset_x, 1 * self.tile_size + self.offset_y, 32, 16)   # 右上 3 (在Row 1)
         self.room_door_rect = pygame.Rect(25 * self.tile_size + self.offset_x, 10 * self.tile_size + self.offset_y, 32, 16)  # 右下 4 (在Row 10)
         self.stairs_rect = pygame.Rect(2 * self.tile_size + self.offset_x, 2 * self.tile_size + self.offset_y, 80, 48)       # 左上 6 (從Row 2開始)
+        # 外界大門感應區（tile=5，最右側中央，Row 5~7）
+        self.gate_rect = pygame.Rect(29 * self.tile_size + self.offset_x, 5 * self.tile_size + self.offset_y, self.tile_size, 3 * self.tile_size)
     def draw(self, screen):
-        # 建立臨時字體用來標註門的名字
-        font = pygame.font.SysFont("simsun", 10)
-        
         for row_idx, row in enumerate(self.grid):
             for col_idx, tile in enumerate(row):
                 x = col_idx * self.tile_size + self.offset_x
@@ -92,10 +90,8 @@ class CorridorMap:
                 
                 if tile == 1: # 走廊外牆（鋼筋混凝土灰色）
                     pygame.draw.rect(screen, (50, 55, 60), (x, y, self.tile_size, self.tile_size))
-                    pygame.draw.rect(screen, (30, 35, 40), (x, y, self.tile_size, self.tile_size), 1)
                 elif tile == 0: # 走廊地板（冷色調磁磚）
                     pygame.draw.rect(screen, (100, 110, 115), (x, y, self.tile_size, self.tile_size))
-                    pygame.draw.rect(screen, (90, 100, 105), (x, y, self.tile_size, self.tile_size), 1)
                 elif tile == 3: # 皮歐里辦公室（紫色門）
                     pygame.draw.rect(screen, (100, 60, 120), (x, y, self.tile_size, self.tile_size))
                 elif tile == 4: # 醫療室（亮木門）
@@ -106,7 +102,6 @@ class CorridorMap:
                     pygame.draw.rect(screen, (30, 50, 80), (x, y, self.tile_size, self.tile_size))
                 elif tile == 7: # 廚房（暗紅色門）
                     pygame.draw.rect(screen, (120, 40, 40), (x, y, self.tile_size, self.tile_size))
-
 """ 皮歐里辦公室 (15x10 置中) """
 class OfficeMap:
 
