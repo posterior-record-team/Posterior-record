@@ -11,6 +11,8 @@ from entities import Bed, Table    # 物件模組
 from map import RoomMap, CorridorMap ,OfficeMap, BasementMap #地圖
 from dialogue_system import DialogueSystem #對話狀態、打字處理、UI 繪製和劇本走向
 from magic_training import MagicTrainingSystem #魔法
+from screens import MainMenuScreen, EndingScreen #初始與結局畫面渲染
+from notification_system import NotificationSystem #字幕
 
 
 class GameEngine:
@@ -56,6 +58,10 @@ class GameEngine:
         # 預設起點
         self.current_scene = "room"
 
+        # 結局選擇視窗相關狀態
+        self.is_gate_prompt_active = False   # 是否顯示「是/否」選擇視窗
+        self.gate_prompt_selected = 0        # 0=是, 1=否
+
         # ====== 實體物件狀態 =======
         # 取得醫療室（room_map）的偏移量，讓物件精準對齊置中的房間
         rx = self.room_map.offset_x if hasattr(self.room_map, 'offset_x') else 0
@@ -93,23 +99,61 @@ class GameEngine:
         self.dialogue_system = DialogueSystem()
         self.can_talk_with_npc = False  # 玩家是否靠近到可以對話的距離
 
+        self.notification_system = NotificationSystem()
+
         # 魔法系統相關狀態
         self.magic_training_system = MagicTrainingSystem()
+
+        # =======================================================
+        # 📌 畫面狀態機與畫面物件初始化 (配合 480x270 解析度修正)
+        # =======================================================
+        self.scene_state = "MENU"  # 核心狀態機: "MENU", "PLAYING", "ENDING"
+        self.menu_screen = MainMenuScreen(self.GAME_WIDTH, self.GAME_HEIGHT)
+        self.ending_screen = EndingScreen()
 
         # 遊戲運行狀態標記
         self.running = True
 
+    def trigger_ending(self, title, content):
+        """當對話系統判定數值爆表時，會經由傳入的 game_state 呼叫此函式進行畫面切換"""
+        self.ending_screen.set_ending(title, content)
+        self.scene_state = "ENDING"
+
+    def resolve_ending_choice(self):
+        """ 根據目前數值，判定要觸發哪一個結局 """
+        heal_level = self.game_state.get_magic_level("heal")
+        karma = self.game_state.karma
+
+        if heal_level >= 10 and karma > 30:
+            self.trigger_ending(
+                "但行好事",
+                "你選擇將治療的力量用於救贖，而非報復。\n你走出了大門，留下了一個依然溫柔的世界。"
+            )
+        elif heal_level >= 10 and karma < -10:
+            self.trigger_ending(
+                "皮囊底下",
+                "治療的魔法早已扭曲成另一種形狀。\n你走出大門時，留在身後的，不再是人類的軀殼。"
+            )
+        elif heal_level >= 10:
+            self.trigger_ending(
+                "庸庸碌碌",
+                "你既沒有成為救贖者，也沒有墮落成怪物。\n你只是走出了大門，平淡地消失在世界的角落。"
+            )
+        else:
+            self.trigger_ending(
+                "你想去哪?",
+                "你尚未準備好面對外面的世界。\n大門之外，只有茫然與未知。"
+            )
+
     def run(self):
         # 遊戲主循環 (Game Loop)
         while self.running:
-            # 取得這一幀與上一幀之間過去了多少毫秒 (Delta Time)
-            # tick(60) 除了限制 60 幀，還會回傳毫秒數
+            # 📌 確保這行有確實執行！tick(60) 除了限制 60 幀，還會回傳這一幀過去了多少毫秒 (dt)
             dt = self.clock.tick(self.FPS)
 
             self.handle_events()
             self.update(dt) # 將時間差傳入更新邏輯
             self.draw()
-            
             
         # 退出遊戲
         pygame.quit()
@@ -121,6 +165,32 @@ class GameEngine:
             if event.type == pygame.QUIT:
                 self.running = False
 
+            if self.scene_state == "MENU":
+                result = self.menu_screen.handle_event(event)
+                if result == "PLAYING":
+                    self.scene_state = "PLAYING"  # 切換到遊戲
+                continue  # 攔截，不往下跑遊戲邏輯
+
+            elif self.scene_state == "ENDING":
+                self.ending_screen.handle_event(event)
+                continue  # 攔截，不往下跑遊戲邏輯
+
+            if self.notification_system.is_active:
+                if event.type == pygame.KEYDOWN:
+                    self.notification_system.handle_keydown(event)
+                continue
+
+            if self.is_gate_prompt_active:
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                        self.gate_prompt_selected = (self.gate_prompt_selected + 1) % 2
+                    elif event.key == pygame.K_RETURN:
+                        if self.gate_prompt_selected == 0:  # 選擇「是」
+                            self.resolve_ending_choice()
+                        self.is_gate_prompt_active = False
+                    elif event.key == pygame.K_ESCAPE:
+                        self.is_gate_prompt_active = False
+                continue  # 攔截，不往下跑其他邏輯
             # =================================================================
             # 狀況 A：鍵盤事件優先導向小遊戲
             # =================================================================
@@ -134,15 +204,26 @@ class GameEngine:
             # =================================================================
             # 狀況 B：正在與皮歐里進行 AI 對話中（文字輸入打字模式）
             # =================================================================
-            # 📌 整合點：只要對話框是開啟狀態 (is_active)，就將所有打字與選字事件餵給它
+
             elif self.dialogue_system.is_active:
                 # 1. 處理特殊功能鍵（如 Enter 送出、Esc 關閉、Backspace 刪除）
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_BACKSPACE:
                         # 呼叫對話系統的刪除字元功能
                         self.dialogue_system.handle_backspace()
+                        
+                    elif event.key == pygame.K_RETURN:
+                        # 📌 強力攔截：只要在對話中按下 Enter，就直接扣除 5 點體力
+                        if hasattr(self, 'game_state') and hasattr(self.game_state, 'energy'):
+                            self.game_state.energy -= 10
+                            if self.game_state.energy < 0:
+                                self.game_state.energy = 0
+                        
+                        # 扣完體力後，再讓對話系統原本的 Enter 送出與清空邏輯繼續執行
+                        self.dialogue_system.handle_keydown(event, game_state=self)
+                        
                     else:
-                        # 傳遞其他按鍵（如 Enter / Esc）
+                        # 傳遞其他按鍵（如 Esc 等）
                         self.dialogue_system.handle_keydown(event, game_state=self)
                     
                 # 2. 📌 修正事件 770：將未確認的注音/組字，精準傳給對話系統的 composition_text
@@ -171,7 +252,7 @@ class GameEngine:
                             self.backpack.toggle()
                             
                         # 如果目前切換到最後一個分頁「離開」(索引值為 4)，按下 Enter 鍵安全退出
-                        elif self.backpack.current_tab == 4 and event.key == pygame.K_RETURN:
+                        elif self.backpack.current_tab == 2 and event.key == pygame.K_RETURN:
                             self.running = False
                             
                     # --- 2. 背包關閉（平常走路探索）狀態下的按鍵判定 ---
@@ -216,15 +297,16 @@ class GameEngine:
 
                             # 從長廊進入辦公室   
                             elif self.current_interact_target == "to_office":
-                                if not self.time_manager.has_office_permission:
-                                    # 📌 修正：這裡也可以直接呼叫 start_normal_dialogue 來播系統警告，不用透過舊的 dead-code
-                                    self.dialogue_system.start_normal_dialogue(["系統：房門被鎖上了。沒有皮歐里的許可，不能進入他的辦公室。"])
-                                    self.current_interact_target = None
-                                else:
+                                if self.game_state.can_enter_office():
                                     self.current_scene = "office"
                                     self.tilemap = self.office_map
                                     self.player.x = self.office_map.door_rect.x + 16
                                     self.player.y = self.office_map.door_rect.y - 16
+                                else:
+                                    self.notification_system.push("房門被鎖上了。沒有皮歐里的許可，不能進入他的辦公室。")
+                                    if self.game_state.favorability < 50:
+                                        self.game_state.suspicion = min(100, self.game_state.suspicion + 10)
+                                    self.current_interact_target = None
 
                             # 從辦公室回長廊   
                             elif self.current_interact_target == "to_corridor_from_office":
@@ -246,48 +328,66 @@ class GameEngine:
                                 self.tilemap = self.corridor_map
                                 self.player.x = self.corridor_map.stairs_rect.x + 50
                                 self.player.y = self.corridor_map.stairs_rect.y + 16
+                            
+                            elif self.current_interact_target == "to_gate":
+                                self.is_gate_prompt_active = True
+                                self.gate_prompt_selected = 0
                 
                 # 📌 只有當不在對話中時，背包才去處理它的輸入事件，避免它干擾打字
                 self.backpack.handle_input(event)
 
     def update(self, dt):
-        # --- 狀況 0：處理睡覺/昏倒的黑畫面 5 秒鐘 ---
+        # 📌 非遊戲狀態時，不更新任何遊戲邏輯
+        if self.scene_state != "PLAYING":
+            return
+        
+        # --- 狀況 0：處理睡覺/昏倒的黑畫面 3 秒鐘 ---
         if self.is_fading:
             self.fade_timer += dt / 1000.0  # pygame的dt是毫秒，要除以1000變秒
             if self.fade_timer >= 3.0:
                 self.is_fading = False
                 self.fade_timer = 0.0
 
-                # 📌 修正點：直接呼叫專用重置函式，精準切換到 06:00
+                # 📌 修正核心 1：醒來那一瞬間，強制將時間校正回早上 08:00
                 if hasattr(self.time_manager, 'set_to_six_am'):
-                    self.time_manager.set_to_six_am()
-                
-                # 如果你的時間系統有天數（Day），可以在這裡讓天數加 1
+                    self.time_manager.set_to_six_am(self)
+                else:
+                    # 防呆：如果對應函式沒抓到，手動強制重置
+                    self.time_manager.current_minutes = 480
+                    self.time_manager.timer_accumulator = 0
+                    self.time_manager.priori_schedule_state = ""
+                    self.time_manager.update_priori_schedule()
+                    self.magic_training_system.update(dt)
                 if hasattr(self.time_manager, 'day'):
                     self.time_manager.day += 1
 
-                # 📌 修正核心：醒來時，把玩家位置往右、往下移開床的範圍（移到空地上），防止原地無限重複觸發睡覺！
+                # 📌 修正核心 2：對照你的 GameState 變數名稱，將體力 (energy) 補滿！
+                if hasattr(self.game_state, 'energy') and hasattr(self.game_state, 'max_energy'):
+                    self.game_state.energy = self.game_state.max_energy
+
+                # 📌 修正核心 3：醒來時，把玩家位置往右、往下移開床的範圍（移到空地上），防止原地無限重複觸發睡覺！
                 self.player.x = self.bed.x + 32
                 self.player.y = self.bed.y + 16
 
-            return # 🚀 重中之重：黑畫面期間，到這裡就 return 結束！絕對不讓下方的午夜判定去重置計時器。
+            return # 🚀 重中之重：黑畫面期間，到這裡就 return 結束！絕對不讓下方的常規更新去跑時間。
         
         # 當背包打開、或是正在跟皮歐里對話時，全部不更新移動與地圖判定
-        if self.backpack.is_open or self.dialogue_system.is_talking:
+        if self.backpack.is_open :
             return # 直接結束這輪更新，凍結玩家與時間
 
         # --- 以下是正常的探索、移動與感應更新邏輯 ---
+        # 將當前的 self.is_fading 狀態傳入，這樣黑屏時時間就不會偷偷在背景偷跑
         self.time_manager.update(
             dt, 
             pioli=self.pioli, 
             room=self.room_map, 
-            corridor=self.corridor_map, # 如果你有傳走廊地圖的話
+            corridor=self.corridor_map, 
             office=self.office_map, 
-            basement=self.basement_map
+            basement=self.basement_map,
+            is_fading=self.is_fading
         )
         
-        # 📌 新增：午夜 12 點（24:00 或 00:00）強制昏倒黑屏判定
-        # 這裡會檢查時間是否來到 24 點（或根據你系統判定午夜的數值修改）
+        # 📌 新增：午夜 12 點（24:00 或 00:00，也就是 1440 分鐘）強制昏倒黑屏判定
         if hasattr(self.time_manager, 'current_minutes') and self.time_manager.current_minutes >= 1440:
             self.is_fading = True
             self.fade_timer = 0.0     
@@ -299,18 +399,17 @@ class GameEngine:
             self.player.y = self.bed.y + 16
             return
 
-        # 📌 終極修正：如果是醫療室，直接將桌子的碰撞箱貼在玩家身上，完全避開函式參數數量問題
+        # 如果是醫療室，直接將桌子的碰撞箱貼在玩家身上，完全避開函式參數數量問題
         if self.current_scene == "room" and hasattr(self, 'table'):
             self.player.current_obstacles = [self.table.get_rect()]
         else:
             self.player.current_obstacles = None  # 其他地圖清空障礙物
 
-        # 🚀 這樣呼叫就維持原本的參數數量，絕對不會再報 TypeError 說數量不對！
         self.player.handle_movement(dt, self.tilemap)
 
-        
         # 每次更新前先重置互動目標
         self.current_interact_target = None
+
         
         # 建立玩家碰撞框時，維持純粹的物理坐標，確保與地圖各門的 Rect 同步
         player_rect = pygame.Rect(int(self.player.x), int(self.player.y), self.player.width, self.player.height)
@@ -339,6 +438,7 @@ class GameEngine:
             
             # 將 inflate_ip 改為 inflate，防止 Y 軸偵測在遊戲迴圈中被無限放大而跑掉
             trigger_stairs = self.corridor_map.stairs_rect.inflate(8, 8)
+            trigger_gate = self.corridor_map.gate_rect.inflate(8, 8)
             
             if player_rect.colliderect(trigger_room):
                 self.current_interact_target = "to_room"
@@ -346,6 +446,8 @@ class GameEngine:
                 self.current_interact_target = "to_office"
             elif player_rect.colliderect(trigger_stairs):
                 self.current_interact_target = "to_basement"
+            elif player_rect.colliderect(trigger_gate): 
+                self.current_interact_target = "to_gate"   
                 
         # --- 3. 玩家在皮歐里辦公室 ---
         elif self.current_scene == "office":
@@ -354,7 +456,6 @@ class GameEngine:
             if player_rect.colliderect(trigger):
                 self.current_interact_target = "to_corridor_from_office"
                 
-        # --- 4. 玩家在地下一樓 ---
         # --- 4. 玩家在地下一樓 ---
         elif self.current_scene == "basement":
             # 將 inflate_ip 改為 inflate，確保地下室的傳送判定格不會位移
@@ -382,12 +483,22 @@ class GameEngine:
                 self.can_talk_with_npc = False
         else:
             self.can_talk_with_npc = False
-                        
+
     def draw(self):
         #  畫面繪製
         # 預設底色塗黑
         self.screen.fill((0, 0, 0))
 
+         # 📌 根據畫面狀態決定要畫什麼
+        if self.scene_state == "MENU":
+            self.menu_screen.draw(self.screen, self.font)
+            pygame.display.flip()
+            return
+        
+        elif self.scene_state == "ENDING":
+            self.ending_screen.draw(self.screen, self.font)
+            pygame.display.flip()
+            return
         # =================================================================
         # LAYER 1：世界實體與地圖層（最底層）
         # =================================================================
@@ -443,6 +554,8 @@ class GameEngine:
                 prompt_str = "[F] 上樓 (1F)"
             elif self.current_interact_target == "use_bed":
                 prompt_str = "[F] 睡覺"
+            elif self.current_interact_target == "to_gate":
+                prompt_str = "[F] 踏出大門"
                 
             prompt_surface = self.font.render(prompt_str, True, (255, 255, 0))
             # 固定渲染在畫面的中下方，精緻又不擋視線（睡覺提示統一使用此處）
@@ -457,14 +570,6 @@ class GameEngine:
         time_text = self.time_manager.get_time_string()
         time_surface = self.font.render(time_text, False, (255, 255, 255)) 
         self.screen.blit(time_surface, (self.GAME_WIDTH - time_surface.get_width() - 10, 10))
-        """
-        # 4. 左上角皮歐里狀態除錯文字
-        schedule_tag = self.time_manager.priori_schedule_state
-        status_text = self.time_manager.get_priori_status_text()
-        debug_text = f"【排程標籤】: {schedule_tag} | {status_text}"
-        debug_surface = self.font.render(debug_text, False, (0, 255, 255)) 
-        self.screen.blit(debug_surface, (10, 10))
-         """
         
         # 5. 右下角直立式血量與體力條 (HP / Energy Bar)
         margin_x = 10  # 距離右邊界的邊距
@@ -496,15 +601,31 @@ class GameEngine:
         # 6. 渲染對話框（確保對話框在普通 UI 上方，但依然在背包下方）
         self.dialogue_system.draw(self.screen, self.font)
 
+        # 7. 渲染字幕框
+        self.notification_system.draw(self.screen, self.font)
 
+        # 📌 結局選擇視窗（優先度高於背包，但低於黑屏特效）
+        if self.is_gate_prompt_active:
+            prompt_rect = pygame.Rect(90, 100, 300, 70)
+            pygame.draw.rect(self.screen, (25, 25, 30), prompt_rect)
+            pygame.draw.rect(self.screen, (255, 255, 255), prompt_rect, 1)
+            
+            question_surf = self.font.render("要踏出這座設施，回到外面的世界嗎？", True, (255, 255, 255))
+            self.screen.blit(question_surf, (prompt_rect.x + 15, prompt_rect.y + 10))
+            
+            options = ["是", "否"]
+            for i, opt in enumerate(options):
+                color = (255, 215, 0) if i == self.gate_prompt_selected else (150, 150, 150)
+                opt_text = f"▶ {opt}" if i == self.gate_prompt_selected else f"  {opt}"
+                opt_surf = self.font.render(opt_text, True, color)
+                self.screen.blit(opt_surf, (prompt_rect.x + 30 + i * 100, prompt_rect.y + 40))
+        
         # =================================================================
         # LAYER 3：最高優先級 UI 層（最頂層）
         # =================================================================
         # 只有當背包打開時，才呼叫繪製，這會直接覆蓋掉下方所有的實體、地圖、對話框與提示字
         if self.backpack.is_open:
             self.backpack.draw(self.screen, self.game_state)
-
-
         # =================================================================
         # LAYER 4：螢幕特效層（全黑遮罩）
         # =================================================================
