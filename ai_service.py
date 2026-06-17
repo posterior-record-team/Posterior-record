@@ -1,10 +1,17 @@
 #初始化 AI、讀取 API Key、設定 Prompt（角色人設）以及發送請求
 # ai_service.py
 import threading
+import os
+from dotenv import load_dotenv
 
 class AIService:
     def __init__(self):
-        self.api_key = "YOUR_API_KEY"
+        load_dotenv()
+        
+        self.api_key = os.getenv("GEMINI_API_KEY") 
+        if not self.api_key:
+            raise ValueError("找不到 GEMINI_API_KEY 環境變數，請在系統中設定該變數")
+        
         # 📌 在這裡定死皮歐里的人設底層，確保他不會出戲
         self.system_prompt = (
             "你是一位名叫皮歐里的神祕醫生兼監測者。你將玩家關在設施裡。"
