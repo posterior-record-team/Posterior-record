@@ -1,4 +1,4 @@
 .env
 .evn
-api.evn
+api.evn .env.example
 __pycache__/
