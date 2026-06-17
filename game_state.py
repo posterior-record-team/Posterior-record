@@ -20,7 +20,7 @@ class GameState:
         self.current_tab = 0          # 背包目前分頁：0=道具, 1=術法, 2=檔案
         
         # 2. 皮歐里的關係數值 (先占位)
-        self.priori_trust = 20  # 信任值（決定對話語氣與結局走向）
+        self.priori_trust = 0  # 信任值（決定對話語氣與結局走向）
         
         # 3. 背包與其他系統占位（之後會對接到背包系統）
         self.inventory = []     # 物品欄
@@ -29,4 +29,27 @@ class GameState:
         self.corruption = 0      # 精神污染度 (0 ~ 100)
         self.suspicion = 0       # 警戒值 (0 ~ 100)
         self.favorability=0     #好感度
+
+    def get_magic_level(self, magic_type):
+        """
+        根據經驗值計算等級，每 50 經驗 1 級，最高 10 級。
+        magic_type: "heal", "attack", "thief"
+        """
+        exp_map = {
+            "heal": self.magic_exp_heal,
+            "attack": self.magic_exp_attack,
+            "thief": self.magic_exp_thief
+        }
+        exp = exp_map.get(magic_type, 0)
+        level = exp // 50
+        return min(level, 10)
+    
+    def can_enter_office(self):
+        """ 即時判斷玩家當下是否能進入辦公室 """
+        thief_level = self.get_magic_level("thief")
+        if thief_level >= 5:
+            return True
+        if self.favorability >= 30 and self.suspicion < 10:
+            return True
+        return False
  

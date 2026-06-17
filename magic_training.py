@@ -19,8 +19,17 @@ class MagicTrainingSystem:
         self.success_count = 0          # 目前成功幾次
         
         # 字庫
-        self.word_pool = ["heal", "cure", "light", "fire", "burn", "blast", "lock", "hide", "steal"]
+        self.word_pools = {
+        "治療": ["relax", "i will heal you", "don't be afraid"],
+        "攻擊": ["go away", "don't come near me", "destroy"],
+        "盜賊": ["steal", "cautiously", "it's free"]
+        }
+        self.word_pool = []  # 目前使用中的字庫，會在 start_typing_game 時設定
 
+        # 📌 新增：升級提示相關
+        self.level_up_message = ""      # 目前要顯示的升級文字
+        self.level_up_timer = 0.0       # 提示顯示倒數計時（秒）
+    
     def start_training(self):
         """ 觸發進入選單 """
         if self.has_triggered_zone: # 如果鎖住了，就不重複觸發
@@ -32,16 +41,22 @@ class MagicTrainingSystem:
 
     def start_typing_game(self):
         """ 進入打字小遊戲狀態 """
+        self._shuffled_pool = []
         self.state = "GAME"
         self.wrong_count = 0
         self.success_count = 0
         self.player_typed = ""
+        chosen_magic = self.options[self.selected_idx]
+        self.word_pool = self.word_pools.get(chosen_magic, [])
         self.generate_new_word()
 
     def generate_new_word(self):
         """ 隨機抽一個單字 """
-        self.target_word = random.choice(self.word_pool)
-        self.player_typed = ""
+        if not hasattr(self, '_shuffled_pool') or not self._shuffled_pool:
+            self._shuffled_pool = self.word_pool[:]
+            random.shuffle(self._shuffled_pool)
+        self.target_word = self._shuffled_pool.pop() 
+        self.player_typed = ""   
 
     def handle_keydown(self, event, player, engine=None):
         """ 
@@ -67,13 +82,14 @@ class MagicTrainingSystem:
                     
                     chosen_magic = self.options[self.selected_idx]
                     
-                    # 📌 檢查皮歐里是否在地下室，且玩家不聽話選了非治療魔法
+
                     if engine and hasattr(engine, 'pioli') and hasattr(engine, 'time_manager'):
                         # 只要皮歐里目前的場景跟玩家一樣都在地下室，他就看得到你
                         if engine.pioli.current_scene == "basement":
                             if chosen_magic != "治療":
-                                engine.time_manager.favorability -= 5
-                                print(f"【系統】皮歐里在你身後盯著你... 他不喜歡你練這個。好感度降至: {engine.time_manager.favorability}")
+                                engine.game_state.favorability -= 5
+                                if hasattr(engine, 'notification_system'):
+                                    engine.notification_system.push("皮歐里不喜歡你練這個。皮歐里對你的好感度減少")
                     
                     self.start_typing_game()
                 else:
@@ -84,7 +100,7 @@ class MagicTrainingSystem:
         elif self.state == "GAME":
             # 拿到玩家按下的英文字母鍵 (a-z)
             char = event.unicode.lower()
-            if char.isalpha() and len(char) == 1:
+            if (char.isalpha() or char in (" ", "'")) and len(char) == 1:
                 # 檢查玩家打的字母是否符合單字的下一個位置
                 expected_index = len(self.player_typed)
                 if char == self.target_word[expected_index]:
@@ -98,25 +114,38 @@ class MagicTrainingSystem:
                             is_double_time = False
                             if engine and hasattr(engine, 'time_manager'):
                                 current_m = engine.time_manager.current_minutes
-                                # 條件：在 09:00 ~ 11:30 (540~690分鐘) 且 皮歐里確實人在地下室陪你
                                 if 540 <= current_m < 690 and engine.pioli.current_scene == "basement":
                                     is_double_time = True
                             
                             exp_gain = 20 if is_double_time else 10
-                            if is_double_time:
-                                print(f"【特訓成功】皮歐里在旁指導！獲得雙倍經驗值：+{exp_gain}")
-                            else:
-                                print(f"【練習成功】獨自練習結束。獲得經驗值：+{exp_gain}")
+                            
+                            if engine and hasattr(engine, 'notification_system'):
+                                if is_double_time:
+                                    engine.notification_system.push(f"【特訓成功】皮歐里在旁指導！獲得雙倍經驗值：+{exp_gain}")
+                                else:
+                                    engine.notification_system.push(f"【練習成功】獨自練習結束。獲得經驗值：+{exp_gain}")
                             
                             # 增加對應魔法經驗值
                             chosen_magic = self.options[self.selected_idx]
+                            magic_key_map = {"治療": "heal", "攻擊": "attack", "盜賊": "thief"}
+                            magic_key = magic_key_map[chosen_magic]
+
+                            # 📌 先記錄升級前的等級
+                            level_before = player.get_magic_level(magic_key)
+                                
                             if chosen_magic == "治療":
                                 player.magic_exp_heal += exp_gain
                             elif chosen_magic == "攻擊":
                                 player.magic_exp_attack += exp_gain
                             elif chosen_magic == "盜賊":
                                 player.magic_exp_thief += exp_gain
-                                
+
+                            # 📌 比較升級後的等級，如果提升了就觸發提示
+                            level_after = player.get_magic_level(magic_key)
+                            if level_after > level_before:
+                                if engine and hasattr(engine, 'notification_system'):
+                                    engine.notification_system.push(f"{chosen_magic}魔法升級到 {level_after} 級！")
+
                             self.is_active = False # 結束小遊戲
                         else:
                             self.generate_new_word() # 繼續下一個字
@@ -126,8 +155,25 @@ class MagicTrainingSystem:
                     if self.wrong_count >= 3:
                         # ❌ 錯誤滿三次，練習失敗
                         self.is_active = False
+    
+    def update(self, dt):
+        """ 處理升級提示的倒數計時 """
+        if self.level_up_timer > 0:
+            self.level_up_timer -= dt / 1000.0
+            if self.level_up_timer <= 0:
+                self.level_up_timer = 0
+                self.level_up_message = ""
 
     def draw(self, screen, font):
+        if self.level_up_timer > 0:
+            msg_surf = font.render(self.level_up_message, True, (255, 215, 0))
+            msg_bg = pygame.Rect(0, 0, msg_surf.get_width() + 20, 24)
+            msg_bg.centerx = 240
+            msg_bg.y = 30
+            pygame.draw.rect(screen, (20, 20, 25), msg_bg)
+            pygame.draw.rect(screen, (255, 215, 0), msg_bg, 1)
+            screen.blit(msg_surf, (msg_bg.x + 10, msg_bg.y + 5))
+
         if not self.is_active:
             return
 
