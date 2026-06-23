@@ -15,7 +15,6 @@ class Player:
         self._load_images()
 
     def _load_images(self):
-        """ 圖片載入位置，圖檔準備好後取消註解並填入正確路徑 """
         try:
             # 📌 先讀取原始圖片
             raw_up = pygame.image.load("picture/player_up.png").convert_alpha()

@@ -47,6 +47,24 @@ class CorridorMap:
 
     def __init__(self):
         self.tile_size = 16
+        self.kitchen_image = None #廚房圖片
+        #載入廚房圖片
+        try:
+            raw_kitchen = pygame.image.load("picture/kitchen.png").convert()
+            kitchen_w = 5 * self.tile_size
+            kitchen_h = 5 * self.tile_size
+            self.kitchen_image = pygame.transform.scale(raw_kitchen, (kitchen_w, kitchen_h))
+        except Exception as e:
+            print(f"【廚房圖片載入失敗】{e}")
+        
+        self.stairs_image = None #樓梯圖片
+        try:
+            raw_stairs = pygame.image.load("picture/stairs.png").convert()
+            stairs_w = 5 * self.tile_size
+            stairs_h = 3 * self.tile_size
+            self.stairs_image = pygame.transform.scale(raw_stairs, (stairs_w, stairs_h))
+        except Exception as e:
+            print(f"【廚房圖片載入失敗】{e}")
 
         
         # 1=外牆空氣牆, 0=走廊地板
@@ -99,9 +117,17 @@ class CorridorMap:
                 elif tile == 5: # 外界大門（鐵捲門色）
                     pygame.draw.rect(screen, (140, 140, 140), (x, y, self.tile_size, self.tile_size))
                 elif tile == 6: # 樓梯（深藍色）
-                    pygame.draw.rect(screen, (30, 50, 80), (x, y, self.tile_size, self.tile_size))
+                    if self.stairs_image :
+                        stairs_x = 2 * self.tile_size + self.offset_x
+                        stairs_y = 2 * self.tile_size + self.offset_y
+                        screen.blit(self.stairs_image, (stairs_x, stairs_y))
                 elif tile == 7: # 廚房（暗紅色門）
-                    pygame.draw.rect(screen, (120, 40, 40), (x, y, self.tile_size, self.tile_size))
+                    if self.kitchen_image :
+                        kitchen_x = 2 * self.tile_size + self.offset_x
+                        kitchen_y = 6 * self.tile_size + self.offset_y
+                        screen.blit(self.kitchen_image, (kitchen_x, kitchen_y))
+
+                
 """ 皮歐里辦公室 (15x10 置中) """
 class OfficeMap:
 
@@ -143,6 +169,19 @@ class BasementMap:
     
     def __init__(self):
         self.tile_size = 16
+
+        self.stairs_image = None #樓梯圖片
+        try:
+            raw_stairs = pygame.image.load("picture/stairs.png").convert()
+            stairs_w = 5 * self.tile_size
+            stairs_h = 3 * self.tile_size
+            self.stairs_image = pygame.transform.scale(raw_stairs, (stairs_w, stairs_h))
+            self.stairs_image = pygame.transform.flip(self.stairs_image , True, False)
+            
+        except Exception as e:
+            print(f"【廚房圖片載入失敗】{e}")
+
+
         # 1=牆, 0=地板, 6=回長廊的樓梯(設在左上角 [1][1] 和 [1][2])
         self.grid = [
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -174,6 +213,9 @@ class BasementMap:
                 if tile == 1:
                     pygame.draw.rect(screen, (40, 45, 50), (x, y, self.tile_size, self.tile_size))
                 elif tile == 6: # 樓梯
-                    pygame.draw.rect(screen, (30, 50, 80), (x, y, self.tile_size, self.tile_size))
+                    if self.stairs_image :
+                        stairs_x = 2 * self.tile_size + self.offset_x
+                        stairs_y = 2 * self.tile_size + self.offset_y
+                        screen.blit(self.stairs_image, (stairs_x, stairs_y))
                 elif tile == 0:
                     pygame.draw.rect(screen, (70, 75, 80), (x, y, self.tile_size, self.tile_size))        

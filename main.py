@@ -306,6 +306,7 @@ class GameEngine:
                                     self.notification_system.push("房門被鎖上了。沒有皮歐里的許可，不能進入他的辦公室。")
                                     if self.game_state.favorability < 50:
                                         self.game_state.suspicion = min(100, self.game_state.suspicion + 10)
+                                       
                                     self.current_interact_target = None
 
                             # 從辦公室回長廊   

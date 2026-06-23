@@ -243,15 +243,9 @@ class DialogueSystem:
                     core_state.favorability = min(100, core_state.favorability + 5)
                     if notify: notify.push("皮歐里對你的好感度增加")
 
-                # ------ 3. 常規對話所造成的環境壓力 ------
-                if hasattr(core_state, 'corruption'):
-                    core_state.corruption = min(100, core_state.corruption + 4)
-                    if notify: notify.push("精神污染度增加")
-                if hasattr(core_state, 'suspicion'):
-                    core_state.suspicion = min(100, core_state.suspicion + 5)
-                    if notify: notify.push("警戒值增加")
 
-                # ------ 4. 玩家善惡值（Karma）關鍵字判定 ------
+
+                # ------ 3. 玩家善惡值（Karma）關鍵字判定 ------
                 if hasattr(core_state, 'karma'):
                     if any(w in lower for w in ["殺", "死", "毀滅", "報仇", "消滅"]):
                         core_state.karma -= 1
